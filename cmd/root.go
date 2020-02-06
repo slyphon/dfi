@@ -16,89 +16,153 @@ limitations under the License.
 package cmd
 
 import (
-  "fmt"
-  "os"
+	"fmt"
+	"os"
+
+	"github.com/pkg/errors"
   "github.com/spf13/cobra"
+  log "github.com/sirupsen/logrus"
 
-  homedir "github.com/mitchellh/go-homedir"
-  "github.com/spf13/viper"
-
+	homedir "github.com/mitchellh/go-homedir"
+	df "github.com/slyphon/dfi/internal/dotfile"
+	"github.com/spf13/viper"
 )
 
 
-var cfgFile string
+var (
+  cfgFile string
+  conflictOpt string
 
+  settings df.Settings = df.Settings{
+		Prefix:      "",
+		OnConflict:  df.Backup,
+		DryRun:      false,
+		SourcePaths: nil,
+    DestPath:    "",
+  }
 
-// rootCmd represents the base command when called without any subcommands
-var rootCmd = &cobra.Command{
-  Use:   "dfi",
-  Short: "Manages dotfile symlinks to version-controlled files",
-  Long: `The purpose of this utility is to keep configuration files and directories
-  under source control in a single directory, then symlink them into place.
-  This program will by default look in the current working directory for a
-  directory named 'dotfiles', and will create symlinks to all of them in the
-  parent of the current directory with a '.' prepended.
+  // rootCmd represents the base command when called without any subcommands
+  rootCmd = &cobra.Command{
+    Use:   "dfi sources... dest",
+    Short: "Manages dotfile symlinks to version-controlled files",
+    Long: `Usage: dfi [flags] sources... dest
 
-  $HOME/
-    .settings/
-      dotfiles/
-        bashrc
-        bash_profile
-        zshrc
-        ssh/
-          config
+Sources should be a list of (non-recursive) globs, files, and directories whose
+contents should be symlinked into dest. The contents of directories are noted
+with a trailing '/' on the path. To link a directory itself, omit the trailing
+slash.
 
-  if you cd into '~/.settings' and run dotinstall it will create the following symlinks:
+SOURCES:
 
-  $HOME/
-    .bashrc -> .settings/dotfiles/bashrc
-    .bash_profile -> .settings/dotfiles/bash_profile
-    .zshrc -> .settings/dotfiles/zshrc
-    .ssh -> .settings/dotfiles/ssh
+    foo*    -> files beginning with 'foo'
+    a/dir/  -> contents of 'a/dir'
+    a/dir   -> create a link to 'dir' itself in dest
 
-  Additionally, it can install links under a 'bin' directory, where the '.' prefix
-  is not applied. This is useful when you have a number of shell scripts and want
-  to link them from your version controllled directory into a location in your PATH.
+For info on the supported glob syntax, see https://github.com/gobwas/glob
 
-  $HOME/
-    .settings/
-      bin/
-        foo
-        bar
-        baz
+MOTIVATION:
 
-  can be linked to
+The purpose of this utility is to keep configuration files and directories
+under source control in a single directory, then symlink them into place.
+This program will by default look in the current working directory for a
+directory named 'dotfiles', and will create symlinks to all of them in the
+parent of the current directory with a '.' prepended.
 
-  $HOME/
-    .local/
-      bin/
-        foo -> ../../.settings/bin/foo
-        bar -> ../../.settings/bin/bar
-        baz -> ../../.settings/bin/baz
+$HOME/
+  .settings/
+    dotfiles/
+      bashrc
+      bash_profile
+      zshrc
+      ssh/
+        config
 
-  In the case of conflicts (i.e. destination already exists) you can decide
-  how files and symlinks will be handled.
+if you cd into '~/.settings' and run dotinstall it will create the following symlinks:
 
-  If a link path already exists and is a file, the following strategies are available:
+$HOME/
+  .bashrc -> .settings/dotfiles/bashrc
+  .bash_profile -> .settings/dotfiles/bash_profile
+  .zshrc -> .settings/dotfiles/zshrc
+  .ssh -> .settings/dotfiles/ssh
 
-  * 'backup': move the file to a unique dated backup location and create the symlink
+Additionally, it can install links under a 'bin' directory, where the '.' prefix
+is not applied. This is useful when you have a number of shell scripts and want
+to link them from your version controllled directory into a location in your PATH.
 
-  * 'replace': just delete the file and create the symlink
+$HOME/
+  .settings/
+    bin/
+      foo
+      bar
+      baz
 
-  * 'warn': print a warning that the conflict exists and continue.
+can be linked to
 
-  * 'fail': stop processing and report an error.
+$HOME/
+  .local/
+    bin/
+      foo -> ../../.settings/bin/foo
+      bar -> ../../.settings/bin/bar
+      baz -> ../../.settings/bin/baz
 
-  If a symlink exists:
+In the case of conflicts (i.e. destination already exists) you can decide
+how files and symlinks will be handled.
 
-  * 'replace': assume we own the symlink and recreate it pointing to the target
+If a link path already exists, the following strategies are available:
 
-  * 'warn': print a warning that the conflict exists and continue
+* 'backup': move the file to a unique dated backup location and create the symlink
 
-  * 'fail': stop processing and report an error`,
-  // Uncomment the following line if your bare application
-  // has an action associated with it:
-  //	Run: func(cmd *cobra.Command, args []string) { },
+* 'replace': just delete the file and create the symlink
+
+* 'warn': print a warning that the conflict exists and continue.
+
+* 'fail': stop processing and report an error.
+
+EXAMPLES:
+
+create symlinks for all files in 'dotfiles' in the home directory, with a '.' prefix
+for each symlink name. i.e. ~/.bashrc -> .settings/dotfiles/bashrc
+
+  $ dfi -p . ~/.settings/dotfiles/ ~/
+
+create symlinks for all files in 'bin' under ~/.local/bin.
+eg. ~/.local/bin/foo -> ../../.settings/bin/foo
+
+  $ dfi ~/.settings/bin/ ~/.local/bin
+
+`,
+    Args: cobra.MinimumNArgs(2),
+    // Uncomment the following line if your bare application
+    // has an action associated with it:
+    RunE: func(cmd *cobra.Command, args []string) (err error) {
+      if settings.OnConflict, err = df.OnConflictForString(conflictOpt); err != nil {
+        return err
+      }
+
+      settings.DestPath = args[len(args)-1]
+
+      if err = destIsDir(settings.DestPath); err != nil {
+        return err
+      }
+
+      settings.SourcePaths = args[0:len(args)-1]
+
+      log.Infof("parsed settings: %+v", settings)
+
+      return nil
+    },
+  }
+)
+
+func destIsDir(dest string) error {
+  info, err := os.Stat(dest)
+  if err != nil {
+    return errors.Wrapf(err, "failed to stat dest: %v", dest)
+  }
+  if !info.Mode().IsDir() {
+    return errors.Errorf("dest was not a directory: %v", dest)
+  }
+  return nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.
@@ -117,12 +181,9 @@ func init() {
   // Cobra supports persistent flags, which, if defined here,
   // will be global for your application.
 
-  rootCmd.PersistentFlags().StringVar(&cfgFile, "config", "", "config file (default is $HOME/.dfi-go.yaml)")
-
-
-  // Cobra also supports local flags, which will only run
-  // when this action is called directly.
-  rootCmd.Flags().BoolP("toggle", "t", false, "Help message for toggle")
+  rootCmd.PersistentFlags().StringVarP(&settings.Prefix, "prefix", "p", "", "A prefix to put before link names, eg. dotfiles have a '.' prefix")
+  rootCmd.PersistentFlags().StringVarP(&conflictOpt, "on-conflct", "C", "backup", "Action to take when the symlink location exists: backup, replace, warn, fail")
+  rootCmd.PersistentFlags().BoolVarP(&settings.DryRun, "dry-run", "n", false, "Show what would be done, take no action")
 }
 
 

@@ -15,7 +15,7 @@ limitations under the License.
 */
 package main
 
-import "github.com/slyphon/dfi-go/cmd"
+import "github.com/slyphon/dfi/cmd"
 
 func main() {
   cmd.Execute()

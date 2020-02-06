@@ -1,4 +1,4 @@
-module github.com/slyphon/dfi-go
+module github.com/slyphon/dfi
 
 go 1.13
 
