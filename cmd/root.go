@@ -35,7 +35,7 @@ var (
 
   settings df.Settings = df.Settings{
 		Prefix:      "",
-		OnConflict:  df.Backup,
+		OnConflict:  df.Rename,
 		DryRun:      false,
 		SourcePaths: nil,
     DestPath:    "",
@@ -47,18 +47,11 @@ var (
     Short: "Manages dotfile symlinks to version-controlled files",
     Long: `Usage: dfi [flags] sources... dest
 
-Sources should be a list of (non-recursive) globs, files, and directories whose
-contents should be symlinked into dest. The contents of directories are noted
-with a trailing '/' on the path. To link a directory itself, omit the trailing
-slash.
+Sources should be a list of paths that should have symlinks created in
+dest. Note that the case of duplicate filenames (which would create
+two sources to the same symlink) is considered an error.
 
-SOURCES:
-
-    foo*    -> files beginning with 'foo'
-    a/dir/  -> contents of 'a/dir'
-    a/dir   -> create a link to 'dir' itself in dest
-
-For info on the supported glob syntax, see https://github.com/gobwas/glob
+  dfi path/to/foo path/to/another/foo path/to/dest  # << ERROR
 
 MOTIVATION:
 
@@ -110,7 +103,7 @@ how files and symlinks will be handled.
 
 If a link path already exists, the following strategies are available:
 
-* 'backup': move the file to a unique dated backup location and create the symlink
+* 'rename': move the file to a unique dated location and create the symlink
 
 * 'replace': just delete the file and create the symlink
 
@@ -123,12 +116,12 @@ EXAMPLES:
 create symlinks for all files in 'dotfiles' in the home directory, with a '.' prefix
 for each symlink name. i.e. ~/.bashrc -> .settings/dotfiles/bashrc
 
-  $ dfi -p . ~/.settings/dotfiles/ ~/
+  $ dfi -p . ~/.settings/dotfiles/* ~/
 
 create symlinks for all files in 'bin' under ~/.local/bin.
 eg. ~/.local/bin/foo -> ../../.settings/bin/foo
 
-  $ dfi ~/.settings/bin/ ~/.local/bin
+  $ dfi ~/.settings/bin/* ~/.local/bin
 
 `,
     Args: cobra.MinimumNArgs(2),
@@ -182,7 +175,7 @@ func init() {
   // will be global for your application.
 
   rootCmd.PersistentFlags().StringVarP(&settings.Prefix, "prefix", "p", "", "A prefix to put before link names, eg. dotfiles have a '.' prefix")
-  rootCmd.PersistentFlags().StringVarP(&conflictOpt, "on-conflct", "C", "backup", "Action to take when the symlink location exists: backup, replace, warn, fail")
+  rootCmd.PersistentFlags().StringVarP(&conflictOpt, "on-conflct", "C", "rename", "Action to take when the symlink location exists: rename, replace, warn, fail")
   rootCmd.PersistentFlags().BoolVarP(&settings.DryRun, "dry-run", "n", false, "Show what would be done, take no action")
 }
 
