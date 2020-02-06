@@ -1,0 +1,15 @@
+---
+version: '3.7'
+services:
+  dfi:
+    build:
+      dockerfile: Dockerfile
+      context: .
+    cap_add:
+      - SYS_PTRACE
+    security_opt:
+      - seccomp:unconfined
+    volumes:
+      - "..:/workspace:cached"
+      - "../.vscode/container-settings.json:/workspace/.vscode/settings.json:ro"
+    command: /bin/sh -c "while sleep 1000; do :; done"
