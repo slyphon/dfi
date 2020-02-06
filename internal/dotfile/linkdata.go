@@ -35,6 +35,18 @@ type LinkData struct {
 
 var emptyLinkData = LinkData{Vpath: "", LinkPath: "", LinkData: ""}
 
+func LinkDataForList(vpaths []string, targetDir string, prefix string) (data []LinkData, err error) {
+	data = make([]LinkData, len(vpaths))
+
+	for i, vp := range vpaths {
+		if data[i], err = LinkDataFor(vp, targetDir, prefix); err != nil {
+			return nil, err
+		}
+	}
+
+	return data, nil
+}
+
 func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error) {
 	linkPath := fp.Join(targetDir, prefix + fp.Base(vpath))
 

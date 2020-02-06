@@ -23,11 +23,11 @@ const (
 )
 
 const (
-	_TimeFormat string = "20060102150405"
+	TimeFormat string = "20060102150405"
 )
 
 func timestamp() string {
-	return time.Now().Format(_TimeFormat)
+	return time.Now().Format(TimeFormat)
 }
 
 func isSymlink(fm os.FileMode) bool {
@@ -109,7 +109,7 @@ func (oc OnConflict) handle(linkPath string) (err error, skip bool) {
 	case Replace:
 		return doReplace(linkPath), false
 	case Warn:
-		log.Warn("Destination %#v exists, skipping", linkPath)
+		log.Warnf("Destination %+v exists, skipping", linkPath)
 		return nil, true
 	case Fail:
 		return errors.Errorf("Destination %#v exists, exiting", linkPath), false
