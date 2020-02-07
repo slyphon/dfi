@@ -8,12 +8,11 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	fp "path/filepath"
-
-	df "github.com/slyphon/dfi/internal/dotfile"
 )
 
 const (
-	TimeFormatFloat string = df.TimeFormat + ".000000000"
+	timeFormat      string = "20060102150405"
+	TimeFormatFloat string = timeFormat + ".000000000"
 )
 
 func timestamp() string {
@@ -69,8 +68,8 @@ type (
 )
 
 var (
-	binfileNames = []string{"ls", "cat", "dog"}
-	dotfileNames = []string{"bashrc", "zshrc", "vimrc"}
+	BinfileNames = []string{"cat", "dog", "ls"}
+	DotfileNames = []string{"bashrc", "vimrc", "zshrc"}
 )
 
 func NewFsFixture() FsFixture {
@@ -78,16 +77,16 @@ func NewFsFixture() FsFixture {
 	HomeDir := mustMkDirAll(TempDir, "home")
 	SettingsDir := mustMkDirAll(HomeDir, "settings")
 	DotfileDir := mustMkDirAll(SettingsDir, "dotfiles")
-	BinDir := mustMkDirAll(DotfileDir, "bin")
+	BinDir := mustMkDirAll(SettingsDir, "bin")
 	LocalBinDir := mustMkDirAll(HomeDir, ".local/bin")
-	Dotfiles := make([]string, 0, len(dotfileNames))
-	Binfiles := make([]string, 0, len(binfileNames))
+	Dotfiles := make([]string, 0, len(DotfileNames))
+	Binfiles := make([]string, 0, len(BinfileNames))
 
-	for _, f := range dotfileNames {
+	for _, f := range DotfileNames {
 		Dotfiles = append(Dotfiles, mustTouch(DotfileDir, f))
 	}
 
-	for _, f := range binfileNames {
+	for _, f := range BinfileNames {
 		Binfiles = append(Binfiles, mustTouch(BinDir, f))
 	}
 
@@ -98,7 +97,9 @@ func NewFsFixture() FsFixture {
 
 func (f FsFixture) Cleanup() {
 	err := os.RemoveAll(f.TempDir)
-	log.WithFields(log.Fields{
-		"err": err,
-	}).Error("ignoring error in FsFixture.Cleanup")
+	if err != nil {
+		log.WithFields(log.Fields{
+			"err": err,
+		}).Error("ignoring error in FsFixture.Cleanup")
+	}
 }

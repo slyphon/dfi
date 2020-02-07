@@ -6,12 +6,31 @@ import (
 )
 
 type (
+	ApplyFn func(ld LinkData) error
+
 	Installer struct {
 		prefix     string
 		onConflict OnConflict
-		apply      func(ld LinkData) error
+		apply      ApplyFn
+	}
+
+	// for testing, collects the LinkData Run calls us with
+	applyCollector struct {
+		links []LinkData
+		apply ApplyFn
 	}
 )
+
+func newApplyCollector() *applyCollector {
+	ac := &applyCollector{}
+	ac.apply = func(ls LinkData) error {
+		ac.links = append(ac.links, ls)
+		return nil
+	}
+
+	return ac
+}
+
 
 func dryRunApply(ld LinkData) error {
 	return nil

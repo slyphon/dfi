@@ -1,9 +1,11 @@
 package dotfile
 
 import (
-		fp "path/filepath"
-		"github.com/pkg/errors"
-		log "github.com/sirupsen/logrus"
+	fp "path/filepath"
+	"sort"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
 )
 
 const SLASH uint8 = 0x2f
@@ -31,6 +33,36 @@ type LinkData struct {
 
 	// LinkData is the contents of the symlink
 	LinkData string
+}
+
+func (d LinkData) mapPaths(fn func(path string) (string, error), skipLinkData bool) (rv *LinkData, err error) {
+	rv = &LinkData{}
+
+	if rv.Vpath, err = fn(d.Vpath); err != nil {
+		return nil, errors.Wrap(err, "failed to apply fn to Vpath")
+	}
+
+	if rv.LinkPath, err = fn(d.LinkPath); err != nil {
+		return nil, errors.Wrap(err, "failed to apply fn to LinkPath")
+	}
+
+	if skipLinkData {
+		rv.LinkData = d.LinkData
+	} else {
+		if rv.LinkData, err = fn(d.LinkData); err != nil {
+			return nil, errors.Wrap(err, "failed to apply fn to LinkData")
+		}
+	}
+
+	return
+}
+
+func (d LinkData) RelTo(basepath string) (rel *LinkData, err error) {
+	fn := func (p string) (string, error) {
+		return fp.Rel(basepath, p)
+	}
+
+	return d.mapPaths(fn, true /* skipLinkData */)
 }
 
 var emptyLinkData = LinkData{Vpath: "", LinkPath: "", LinkData: ""}
@@ -88,3 +120,11 @@ func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error
 		LinkData: vpath,
 	}, nil
 }
+
+type byVpath []LinkData
+
+func (v byVpath) Len() int { return len(v) }
+func (v byVpath) Swap(i, j int) { v[i], v[j] = v[j], v[i] }
+func (v byVpath) Less(i, j int) bool { return v[i].Vpath < v[j].Vpath }
+
+var _ sort.Interface = byVpath(nil)
