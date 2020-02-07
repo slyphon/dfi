@@ -3,6 +3,7 @@ package pathlib
 import (
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
+	"os"
 	"testing"
 )
 
@@ -11,13 +12,14 @@ type PurePathSuite struct {
 	r *require.Assertions
 }
 
+func (s *PurePathSuite) BeforeTest(a, b string) {
+	s.r = s.Require()
+}
+
 func TestPurePaths(t *testing.T) {
 	suite.Run(t, new(PurePathSuite))
 }
 
-func (s *PurePathSuite) BeforeTest(a, b string) {
-	s.r = s.Require()
-}
 
 func (s *PurePathSuite) TestName() {
 	pp := NewPurePath("/a/b/c")
@@ -75,3 +77,32 @@ func (s *PurePathSuite) TestSplit() {
 	s.r.Equal("/a/b/", head.ToString())
 	s.r.Equal("c", tail)
 }
+
+type PosixPathSuite struct {
+	suite.Suite
+	r *require.Assertions
+}
+
+func (s *PosixPathSuite) BeforeTest(a, b string) {
+	s.r = s.Require()
+}
+
+func TestPosixPaths(t *testing.T) {
+	suite.Run(t, new(PosixPathSuite))
+}
+
+func (s *PosixPathSuite) TestIsMount() {
+	pp := NewPosixPath("/")
+	b, e := pp.IsMount()
+	s.r.NoError(e)
+	s.r.True(b)
+
+	wd, err := os.Getwd()
+	s.r.NoError(err)
+	pp = NewPosixPath(wd)
+	b, e = pp.IsMount()
+	s.r.NoError(e)
+	s.r.False(b)
+}
+
+
