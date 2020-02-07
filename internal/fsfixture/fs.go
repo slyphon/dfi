@@ -12,7 +12,7 @@ import (
 
 const (
 	timeFormat      string = "20060102150405"
-	TimeFormatFloat string = timeFormat + ".000000000"
+	TimeFormatFloat        = timeFormat + ".000000000"
 )
 
 func timestamp() string {
@@ -25,7 +25,7 @@ func mustTouch(path ...string) string {
 	var err error
 
 	if fp, err = os.Create(joined); err != nil {
-		log.Panicf("failed to touch file %@v", joined)
+		log.Panicf("failed to touch file %#v", joined)
 	}
 
 	if err = fp.Close(); err != nil {

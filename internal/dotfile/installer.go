@@ -2,6 +2,7 @@ package dotfile
 
 import (
 	"github.com/pkg/errors"
+	"os"
 	fp "path/filepath"
 )
 
@@ -32,7 +33,21 @@ func newApplyCollector() *applyCollector {
 }
 
 
+func exists(path string) (bool, error) {
+	_, err := os.Lstat(path)
+	if err == nil {
+		return true, nil
+	} else if os.IsNotExist(err) {
+		return false, nil
+	} else {
+		return false, errors.Wrapf(err, "unexpected error doing Lstat on %#v", path)
+	}
+}
+
 func dryRunApply(ld LinkData) error {
+	//fn := func () error {
+	//	fp.Dir(ld.LinkPath)
+	//}
 	return nil
 }
 

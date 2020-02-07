@@ -3,6 +3,7 @@ module github.com/slyphon/dfi
 go 1.13
 
 require (
+	github.com/gobwas/glob v0.2.3
 	github.com/mitchellh/go-homedir v1.1.0
 	github.com/pelletier/go-toml v1.6.0 // indirect
 	github.com/pkg/errors v0.9.1
