@@ -102,19 +102,19 @@ func doReplace(path string) error {
 	return errors.Wrapf(os.Remove(path), "failed to remove %#v", path)
 }
 
-func (oc OnConflict) handle(linkPath string) (err error, skip bool) {
+func (oc OnConflict) handle(linkPath string) (skip bool, err error) {
 	switch oc {
 	case Rename:
-		return doRename(linkPath), false
+		return false, doRename(linkPath)
 	case Replace:
-		return doReplace(linkPath), false
+		return false, doReplace(linkPath)
 	case Warn:
 		log.Warnf("Destination %+v exists, skipping", linkPath)
-		return nil, true
+		return true, nil
 	case Fail:
-		return errors.Errorf("Destination %#v exists, exiting", linkPath), false
+		return false, errors.Errorf("Destination %#v exists, exiting", linkPath)
 	default:
-		return nil, false
+		log.Panicf("should never reach here: oc value: %#v", oc)
 	}
 }
 

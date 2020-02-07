@@ -2,24 +2,16 @@ package pathlib
 
 import (
 	"fmt"
-	"github.com/gobwas/glob"
 	"os"
 	"path"
 	fp "path/filepath"
 	"syscall"
 	"time"
+
+	"github.com/gobwas/glob"
 )
 
 type (
-	FileStat interface {
-		Exists() bool
-		IsSymlink() bool
-		IsFile() bool
-		IsDir() bool
-		IsOther() bool
-		FileInfo() os.FileInfo
-	}
-
 	PurePath interface {
 		Name() string
 		Parent() PurePath
@@ -32,12 +24,11 @@ type (
 		// (basically '**' is supported)
 		ExMatch(pattern string) (matched bool, err error)
 		Split() (dir PurePath, file string)
-		ToString() string
+		String() string
 		ToPosix() PosixPath
 	}
 
-	RichFileInfo interface {
-		os.FileInfo
+	FileInfoAdditions interface {
 		IsBlockDevice() bool
 		IsCharDevice() bool
 		IsFifo() bool
@@ -46,8 +37,24 @@ type (
 		IsSymlink() bool
 	}
 
+	RichFileInfo interface {
+		os.FileInfo
+		FileInfoAdditions
+		String() string
+		getInfo() os.FileInfo
+	}
+
+	// Provide path manipulation like PurePath, but also
+	// posix actions on the real filesystem. Note that the
+	// FileInfoAdditions actions on a PosixPath will ignore all
+	// errors and return false. This is the strategy that
+	// the Python stdlib 'pathlib' follows in the interest of
+	// ease of use. If you really need to know about every
+	// error type, then use Stat() and inspect the error case before
+	// interrogating the FileInfoAdditions method.
 	PosixPath interface {
 		PurePath
+		FileInfoAdditions
 		Stat() (RichFileInfo, error)
 		Lstat() (RichFileInfo, error)
 		SymlinkTo(path string) error
@@ -57,15 +64,18 @@ type (
 		MkdirAll(perm os.FileMode) error
 		Remove() error
 		RemoveAll() error
-		Lexists() (bool, error)
-		Exists() (bool, error)
-		IsMount() (bool, error)
+		Lexists() bool
+		Exists() bool
+		IsMount() bool
+		SameFile(other PosixPath) (bool, error)
+		IsDir() bool
 	}
 
 	pathStr string
 )
 
 var _ PurePath = pathStr("")
+var _ fmt.Stringer = pathStr("")
 
 func NewPurePath(s string) PurePath {
 	return pathStr(s)
@@ -101,7 +111,7 @@ func (p pathStr) ExMatch(pattern string) (matched bool, err error) {
 	if err != nil {
 		return false, err
 	}
-	return g.Match(p.ToString()), nil
+	return g.Match(p.String()), nil
 }
 
 func (p pathStr) Split() (dir PurePath, name string) {
@@ -113,7 +123,7 @@ func (p pathStr) ToPosix() PosixPath {
 	return PosixPath(p)
 }
 
-func (p pathStr) ToString() string {
+func (p pathStr) String() string {
 	return string(p)
 }
 
@@ -123,6 +133,10 @@ type richFileInfo struct {
 
 var _ RichFileInfo = richFileInfo{nil}
 var _ os.FileInfo = richFileInfo{nil}
+
+func (r richFileInfo) getInfo() os.FileInfo {
+	return r.info
+}
 
 func (r richFileInfo) Name() string {
 	return r.info.Name()
@@ -172,6 +186,22 @@ func (r richFileInfo) IsSymlink() bool {
 	return r.info.Mode()&os.ModeSymlink != 0
 }
 
+func (r richFileInfo) String() string {
+	return fmt.Sprintf("%#v", struct {
+		Name string
+		Mode string
+		Size int64
+		ModTime time.Time
+		IsDir bool
+	}{
+		Name: r.Name(),
+		Mode: r.Mode().String(),
+		Size: r.Size(),
+		ModTime: r.ModTime(),
+		IsDir: r.IsDir(),
+	})
+}
+
 func (p pathStr) Stat() (RichFileInfo, error) {
 	info, err := os.Stat(string(p))
 	return richFileInfo{info}, err
@@ -218,20 +248,14 @@ func (p pathStr) RemoveAll() error {
 	return os.RemoveAll(string(p))
 }
 
-func (p pathStr) Lexists() (bool, error) {
-	panic("not implemented")
+func (p pathStr) Lexists() bool {
+	_, err := p.Lstat()
+	return err == nil
 }
 
-func (p pathStr) Exists() (bool, error) {
+func (p pathStr) Exists() bool {
 	_, err := p.Stat()
-	switch {
-	case err == nil:
-		return true, nil
-	case os.IsNotExist(err):
-		return false, nil
-	default:
-		return false, err
-	}
+	return err == nil
 }
 
 func getStatT(f os.FileInfo) (*syscall.Stat_t, error) {
@@ -242,32 +266,28 @@ func getStatT(f os.FileInfo) (*syscall.Stat_t, error) {
 	return statT, nil
 }
 
-func (p pathStr) IsMount() (b bool, err error) {
+func (p pathStr) IsMount() bool {
 	var self os.FileInfo
 	var selfStatT *syscall.Stat_t
+	var err error
 
 	if self, err = p.Stat(); err != nil || !self.IsDir() {
-		if os.IsNotExist(err) {
-			// swallow the ENOENT here
-			return false, nil
-		} else {
-			return false, err
-		}
+		return false
 	}
 
 	if selfStatT, err = getStatT(self); err != nil {
-		return false, err
+		return false
 	}
 
 	var myParentInfo os.FileInfo
 
 	if myParentInfo, err = p.Parent().ToPosix().Stat(); err != nil {
-		return false, err
+		return false
 	}
 
 	parentStatT, err := getStatT(myParentInfo)
 	if err != nil {
-		return false, err
+		return false
 	}
 
 	// from linux coreutils:
@@ -275,7 +295,52 @@ func (p pathStr) IsMount() (b bool, err error) {
 	//
 	isNotMnt := (selfStatT.Dev == parentStatT.Dev) && (selfStatT.Ino != parentStatT.Ino)
 
-	return !isNotMnt, nil
+	return !isNotMnt
 }
 
+func (p pathStr) SameFile(other PosixPath) (b bool, err error) {
+	this, err := p.Stat()
+	if err != nil {
+		return false, err
+	}
+	that, err := other.Stat()
+	if err != nil {
+		return false, err
+	}
+	return os.SameFile(this.getInfo(), that.getInfo()), nil
+}
 
+func (p pathStr) IsBlockDevice() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsBlockDevice()
+}
+
+func (p pathStr) IsCharDevice() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsCharDevice()
+}
+
+func (p pathStr) IsFifo() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsFifo()
+}
+
+func (p pathStr) IsFile() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsFile()
+}
+
+func (p pathStr) IsSocket() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsSocket()
+}
+
+func (p pathStr) IsSymlink() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsSymlink()
+}
+
+func (p pathStr) IsDir() bool {
+	info, err := p.Lstat()
+	return err == nil && info.IsDir()
+}

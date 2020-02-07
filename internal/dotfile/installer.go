@@ -1,9 +1,12 @@
 package dotfile
 
 import (
-	"github.com/pkg/errors"
-	"os"
 	fp "path/filepath"
+
+	"github.com/pkg/errors"
+	log "github.com/sirupsen/logrus"
+
+	ppath "github.com/slyphon/dfi/pkg/pathlib"
 )
 
 type (
@@ -32,22 +35,65 @@ func newApplyCollector() *applyCollector {
 	return ac
 }
 
+func runApply(ld LinkData, conflict OnConflict) (err error) {
+	var fn func () error
 
-func exists(path string) (bool, error) {
-	_, err := os.Lstat(path)
-	if err == nil {
-		return true, nil
-	} else if os.IsNotExist(err) {
-		return false, nil
-	} else {
-		return false, errors.Wrapf(err, "unexpected error doing Lstat on %#v", path)
+	fn = func () error {
+		vpath := ppath.NewPosixPath(ld.Vpath)
+		lpath := ppath.NewPosixPath(ld.LinkPath)
+
+		ctx := log.WithFields(log.Fields{
+			"Vpath": ld.Vpath,
+			"LinkPath": ld.LinkPath,
+			"LinkData": ld.LinkData,
+		})
+
+		// if the path doesn't exist or it's a symlink
+		if !lpath.Exists() || lpath.IsSymlink() {
+			// if the path isn't a symlink we can create it and return
+			if !lpath.IsSymlink() {
+				return lpath.SymlinkTo(ld.LinkData)
+			}
+
+			// the path is a symlink, so we have to figure out what to do
+
+			ctx.Debug("found symlink")
+
+			// if the symlink points to the versioned file, we're done
+			if same, err := lpath.SameFile(vpath); err != nil || same {
+				return err
+			}
+
+			// otherwise it's bad, and we delegate to the onConflict.handler
+			// to tell us what to do
+			switch skip, err := conflict.handle(lpath.String()); {
+			case err != nil:
+				return err
+			case skip: 	// the handler wants us to ignore this path
+				return nil
+			default:    // the handler (re)moved the lpath, so try again
+				return fn()
+			}
+		} else if lpath.IsFile() || lpath.IsDir() {
+			switch skip, err := conflict.handle(lpath.String()); {
+			case err != nil:
+				return err
+			case skip:
+				return nil
+			default:
+				return fn()
+			}
+		} else {
+			ctx.Panic("could not handle conflict")
+		}
+
+		return nil
 	}
+
+	return fn()
 }
 
 func dryRunApply(ld LinkData) error {
-	//fn := func () error {
-	//	fp.Dir(ld.LinkPath)
-	//}
 	return nil
 }
 
@@ -55,6 +101,14 @@ func NewDryRunInstaller(prefix string, onConflict OnConflict) *Installer {
 	var apply = dryRunApply
 
 	return &Installer{prefix, onConflict, apply}
+}
+
+func NewInstaller(prefix string, onConflict OnConflict) *Installer {
+	var applyFn ApplyFn
+	applyFn = func (ld LinkData) error {
+		return runApply(ld, onConflict)
+	}
+	return &Installer{prefix, onConflict, applyFn}
 }
 
 func (n *Installer) Run(sourcePaths []string, destPath string) (err error) {
