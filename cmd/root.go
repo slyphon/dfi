@@ -33,7 +33,7 @@ var (
   cfgFile string
   conflictOpt string
 
-  settings df.Settings = df.Settings{
+  settings = df.Settings{
 		Prefix:      "",
 		OnConflict:  df.Rename,
 		DryRun:      false,
@@ -142,7 +142,7 @@ eg. ~/.local/bin/foo -> ../../.settings/bin/foo
 
       log.Infof("parsed settings: %+v", settings)
 
-      return nil
+      return df.ApplySettings(&settings)
     },
   }
 )
@@ -174,9 +174,12 @@ func init() {
   // Cobra supports persistent flags, which, if defined here,
   // will be global for your application.
 
-  rootCmd.PersistentFlags().StringVarP(&settings.Prefix, "prefix", "p", "", "A prefix to put before link names, eg. dotfiles have a '.' prefix")
-  rootCmd.PersistentFlags().StringVarP(&conflictOpt, "on-conflct", "C", "rename", "Action to take when the symlink location exists: rename, replace, warn, fail")
-  rootCmd.PersistentFlags().BoolVarP(&settings.DryRun, "dry-run", "n", false, "Show what would be done, take no action")
+  rootCmd.PersistentFlags().StringVarP(
+    &settings.Prefix, "prefix", "p", "", "A prefix to put before link names, eg. dotfiles have a '.' prefix")
+  rootCmd.PersistentFlags().StringVarP(
+    &conflictOpt, "on-conflct", "C", "rename", "Action to take when the symlink location exists: rename, replace, warn, fail")
+  rootCmd.PersistentFlags().BoolVarP(
+    &settings.DryRun, "dry-run", "n", false, "Show what would be done, take no action")
 }
 
 

@@ -114,7 +114,7 @@ func (oc OnConflict) handle(linkPath string) (skip bool, err error) {
 	case Fail:
 		return false, errors.Errorf("Destination %#v exists, exiting", linkPath)
 	default:
-		log.Panicf("should never reach here: oc value: %#v", oc)
+		panic(fmt.Sprintf("should never reach here: oc value: %#v", oc))
 	}
 }
 

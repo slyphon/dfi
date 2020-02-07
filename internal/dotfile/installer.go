@@ -136,3 +136,8 @@ func (n *Installer) Run(sourcePaths []string, destPath string) (err error) {
 
 	return nil
 }
+
+func ApplySettings(s *Settings) error {
+	return NewInstaller(s.Prefix, s.OnConflict).Run(s.SourcePaths, s.DestPath)
+}
+
