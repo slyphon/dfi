@@ -4,7 +4,6 @@ import (
 	"sort"
 	"testing"
 
-	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
 
 	fsf "github.com/slyphon/dfi/internal/fsfixture"
@@ -12,21 +11,11 @@ import (
 )
 
 type (
-	RequireSuite struct {
-		suite.Suite
-		*require.Assertions
-	}
-
 	InstallerSuite struct {
 		RequireSuite
 		fsFix fsf.FsFixture
 	}
 )
-
-func (rs *RequireSuite) SetT(t *testing.T) {
-	rs.Assertions = rs.Suite.Require()
-	rs.Suite.SetT(t)
-}
 
 var (
 	_ suite.AfterTest  = &InstallerSuite{}

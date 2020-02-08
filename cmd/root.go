@@ -26,9 +26,38 @@ import (
 	df "github.com/slyphon/dfi/internal/dotfile"
 )
 
-func NewRootCommand() (rootCmd *cobra.Command) {
+var stdinMustBeSoloError = errors.New(
+	"can only use stdin source by itself, not with other source arguments")
+
+
+func hasStdinSource(sourceArgs []string) (b bool, err error) {
+	if len(sourceArgs) == 0 {
+		return false, nil
+	}
+
+	firstIsDash := sourceArgs[0] == "-"
+
+	switch {
+	case len(sourceArgs) == 1:
+		return firstIsDash, nil
+	case len(sourceArgs) > 1 && firstIsDash:
+		return false, errors.WithStack(stdinMustBeSoloError)
+	default:
+		return false, nil
+	}
+}
+
+
+// runFn here allows for injecting a different Run for testing.
+// if nil, then use the default one: dotfiles.Run
+func NewRootCommand(runFn df.RunFn) (rootCmd *cobra.Command) {
 	conflictOpt := ""
 	settings := &df.Settings{}
+	nullSep := false
+
+	if runFn == nil {
+		runFn = df.Run
+	}
 
 	rootCmd = &cobra.Command{
 		Use:   "dfi sources... dest",
@@ -39,7 +68,7 @@ Sources should be a list of paths that should have symlinks created in
 dest. Note that the case of duplicate filenames (which would create
 two sources to the same symlink) is considered an error. Sources can
 also be '-' which means to read source paths from stdin, one per line,
-or if the -z flag is given, separated by null bytes.
+or if the -0 flag is given, separated by null bytes.
 
 In the case of conflicts (i.e. destination already exists) you can decide
 how files and symlinks will be handled.
@@ -68,11 +97,29 @@ If a link path already exists, the following strategies are available:
 				return err
 			}
 
-			settings.SourcePaths = args[0 : len(args)-1]
+			sources := args[0 : len(args)-1]
+
+			var isStdin bool
+			if isStdin, err = hasStdinSource(sources); err != nil {
+				return err
+			}
+
+			if isStdin {
+				splitFunc := df.SplitOnNewlines
+				if nullSep {
+					splitFunc = df.SplitOnNullByte
+				}
+
+				if settings.SourcePaths, err = df.ReadSources(os.Stdin, splitFunc); err != nil {
+					return err
+				}
+			} else {
+				settings.SourcePaths = sources
+			}
 
 			log.Tracef("parsed settings: %+v", settings)
 
-			return df.ApplySettings(settings)
+			return runFn(settings)
 		},
 	}
 
@@ -87,6 +134,13 @@ If a link path already exists, the following strategies are available:
 		"on-conflct", "C",
 		"rename",
 		"Action to take when the symlink location exists: rename, replace, warn, fail",
+	)
+
+	rootCmd.PersistentFlags().BoolVarP(
+		&nullSep,
+		"null", "0",
+		false,
+		"Stdin input is separated by the null byte",
 	)
 
 	return rootCmd
