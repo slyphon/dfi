@@ -1,7 +1,7 @@
 package dotfile
 
 import (
-	testhelp "github.com/slyphon/dfi/internal/testhelper"
+	testhelp "github.com/slyphon/dfi/pkg/testhelper"
 )
 
-type RequireSuite = testhelp.RequireSuite
+type RequireSuite = testhelp.DFISuite

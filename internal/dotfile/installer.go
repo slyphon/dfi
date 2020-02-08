@@ -25,6 +25,7 @@ type (
 	}
 )
 
+// stub implementation for testing
 func newApplyCollector() *applyCollector {
 	ac := &applyCollector{}
 	ac.apply = func(ls LinkData) error {
@@ -35,18 +36,30 @@ func newApplyCollector() *applyCollector {
 	return ac
 }
 
+// the real implementation that creates the links
 func runApply(ld LinkData, conflict OnConflict) (err error) {
-	var fn func () error
+	var fn func() error
 
-	fn = func () error {
+	fn = func() error {
 		vpath := ppath.NewPosixPath(ld.Vpath)
 		lpath := ppath.NewPosixPath(ld.LinkPath)
 
 		ctx := log.WithFields(log.Fields{
-			"Vpath": ld.Vpath,
+			"Vpath":    ld.Vpath,
 			"LinkPath": ld.LinkPath,
 			"LinkData": ld.LinkData,
 		})
+
+		conflictFn := func() error {
+			switch skip, err := conflict.Handle(lpath.String()); {
+			case err != nil:
+				return err
+			case skip: // the handler wants us to ignore this path
+				return nil
+			default: // the handler (re)moved the lpath, so try again
+				return fn()
+			}
+		}
 
 		// if the path doesn't exist or it's a symlink
 		if !lpath.Exists() || lpath.IsSymlink() {
@@ -56,7 +69,6 @@ func runApply(ld LinkData, conflict OnConflict) (err error) {
 			}
 
 			// the path is a symlink, so we have to figure out what to do
-
 			ctx.Debug("found symlink")
 
 			// if the symlink points to the versioned file, we're done
@@ -66,23 +78,9 @@ func runApply(ld LinkData, conflict OnConflict) (err error) {
 
 			// otherwise it's bad, and we delegate to the onConflict.handler
 			// to tell us what to do
-			switch skip, err := conflict.Handle(lpath.String()); {
-			case err != nil:
-				return err
-			case skip: 	// the handler wants us to ignore this path
-				return nil
-			default:    // the handler (re)moved the lpath, so try again
-				return fn()
-			}
+			return conflictFn()
 		} else if lpath.IsFile() || lpath.IsDir() {
-			switch skip, err := conflict.Handle(lpath.String()); {
-			case err != nil:
-				return err
-			case skip:
-				return nil
-			default:
-				return fn()
-			}
+			return conflictFn()
 		} else {
 			ctx.Panic("could not handle conflict")
 		}
@@ -93,10 +91,9 @@ func runApply(ld LinkData, conflict OnConflict) (err error) {
 	return fn()
 }
 
-
 func NewInstaller(prefix string, onConflict OnConflict) *Installer {
 	var applyFn ApplyFn
-	applyFn = func (ld LinkData) error {
+	applyFn = func(ld LinkData) error {
 		return runApply(ld, onConflict)
 	}
 	return &Installer{prefix, onConflict, applyFn}
@@ -112,8 +109,8 @@ func areLinkNamesUnique(srcPaths []string) *conflictingNamePair {
 
 	for _, sp := range srcPaths {
 		pp := ppath.NewPurePath(sp)
-		if old, ok := seen[pp.Name()]; ok {
-			return &conflictingNamePair{a: old, b: sp}
+		if prev, ok := seen[pp.Name()]; ok {
+			return &conflictingNamePair{a: prev, b: sp}
 		} else {
 			seen[pp.Name()] = sp
 		}
@@ -169,7 +166,7 @@ func (n *Installer) Run(sourcePaths []string, destPath string) (err error) {
 	return nil
 }
 
-type RunFn func (s *Settings) error
+type RunFn func(s *Settings) error
 
 func Run(s *Settings) error {
 	return NewInstaller(s.Prefix, s.OnConflict).Run(s.SourcePaths, s.DestPath)

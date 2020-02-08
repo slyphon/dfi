@@ -5,16 +5,17 @@ import (
 	"os"
 	"testing"
 
-	df "github.com/slyphon/dfi/internal/dotfile"
-	testhelp "github.com/slyphon/dfi/internal/testhelper"
+	log "github.com/sirupsen/logrus"
 	"github.com/spf13/cobra"
 	"github.com/stretchr/testify/suite"
-	log "github.com/sirupsen/logrus"
+
+	df "github.com/slyphon/dfi/internal/dotfile"
+	testhelp "github.com/slyphon/dfi/pkg/testhelper"
 )
 
 type (
 	RootCmdSuite struct {
-		testhelp.RequireSuite
+		testhelp.DFISuite
 		tmpdir string
 	}
 

@@ -1,6 +1,7 @@
 package dotfile
 
 import (
+	"fmt"
 	"sort"
 	"testing"
 
@@ -12,7 +13,7 @@ import (
 
 type (
 	InstallerSuite struct {
-		RequireSuite
+		suite.Suite
 		fsFix fsf.FsFixture
 	}
 )
@@ -45,24 +46,30 @@ func (s *InstallerSuite) TestDotfiles() {
 
 	r := s.Require()
 
-	err := inst.Run(s.fsFix.Dotfiles, s.fsFix.HomeDir)
+	err := inst.Run(pl.PosixSliceStringer(s.fsFix.Dotfiles), s.fsFix.HomeDir.String())
 	r.NoError(err)
 	r.NotEmpty(ac.links)
-	r.Len(ac.links, 3)
+	r.Len(ac.links, 4)
 
 	sort.Sort(byVpath(ac.links))
 
-	validate := func(ld LinkData, name string) {
-		reld, err := ld.RelTo(s.fsFix.TempDir)
+	validate := func(name string) {
+		ld := LinkDataOpsT(ac.links).
+			Find(func(ld LinkData) bool {
+				return pl.NewPurePath(ld.Vpath).Must().ExMatch("**/" + name)
+			})
+		s.NotNil(ld)
+
+		reld, err := ld.RelTo(s.fsFix.TempDir.String())
 		r.NoError(err)
 		r.Equal(reld.Vpath, "home/settings/dotfiles/"+name)
 		r.Equal(reld.LinkPath, "home/."+name)
 		r.Equal(reld.LinkData, "settings/dotfiles/"+name)
 	}
 
-	validate(ac.links[0], "bashrc")
-	validate(ac.links[1], "vimrc")
-	validate(ac.links[2], "zshrc")
+	validate("bashrc")
+	validate("vimrc")
+	validate("zshrc")
 }
 
 func (s *InstallerSuite) TestBinfiles() {
@@ -75,7 +82,7 @@ func (s *InstallerSuite) TestBinfiles() {
 	}
 
 	r := s.Require()
-	err := inst.Run(s.fsFix.Binfiles, s.fsFix.LocalBinDir)
+	err := inst.Run(pl.PosixSliceStringer(s.fsFix.Binfiles), s.fsFix.LocalBinDir.String())
 
 	r.NoError(err)
 	r.NotEmpty(ac.links)
@@ -84,7 +91,7 @@ func (s *InstallerSuite) TestBinfiles() {
 	sort.Sort(byVpath(ac.links))
 
 	validate := func(ld LinkData, name string) {
-		reld, err := ld.RelTo(s.fsFix.TempDir)
+		reld, err := ld.RelTo(s.fsFix.TempDir.String())
 		r.NoError(err)
 		r.Equal(reld.Vpath, "home/settings/bin/"+name)
 		r.Equal(reld.LinkPath, "home/.local/bin/"+name)
@@ -98,21 +105,29 @@ func (s *InstallerSuite) TestBinfiles() {
 
 func (s *InstallerSuite) TestInstallerDotFiles() {
 	i := NewInstaller(".", ConflictHandlers.Replace)
-	err := i.Run(s.fsFix.Dotfiles, s.fsFix.HomeDir)
+	err := i.Run(pl.PosixSliceStringer(s.fsFix.Dotfiles), s.fsFix.HomeDir.String())
 	s.NoError(err)
 
-	dotPaths := make([]pl.PosixPath, 0, len(s.fsFix.Dotfiles))
-	for _, p := range s.fsFix.Dotfiles {
-		dotPaths = append(dotPaths, pl.NewPosixPath(p))
-	}
+	dotPaths := pl.PosixPathOpsT(s.fsFix.Dotfiles).
+		Filter(func(pp pl.PosixPath) bool {
+			return !pp.Must().ExMatch("**/config")
+		})
 
-	home := pl.NewPosixPath(s.fsFix.HomeDir)
+	sort.Sort(pl.LexOrderPosix(dotPaths))
+
+	home := s.fsFix.HomeDir
 
 	entries, err := home.Glob(".*")
 	s.NoError(err)
-	sort.Sort(pl.LexOrder(entries))
-	s.Len(entries, 4)                             // also has the ".local" dir
-	entries = append(entries[:1], entries[2:]...) // cut out .local
+	sort.Sort(pl.LexOrderPosix(entries))
+	s.Len(entries, 5) // also has the ".local" and ".config" dirs
+
+	entries = pl.PosixPathOpsT(entries).
+		Filter(func(pp pl.PosixPath) bool {
+			return !pp.Must().ExMatch("**/.{config,local}")
+		})
+
+	s.Len(entries, 3)
 
 	expectNames := []string{".bashrc", ".vimrc", ".zshrc"}
 	for i, pp := range entries {
@@ -120,18 +135,18 @@ func (s *InstallerSuite) TestInstallerDotFiles() {
 		s.Equal(x, pp.Name())
 		b, e := dotPaths[i].SameFile(pp)
 		s.NoError(e)
-		s.True(b)
+		s.True(b, fmt.Sprintf("expected %+v to be the same file as %+v", dotPaths[i], pp))
 	}
 }
 
 func (s *InstallerSuite) TestInstallerBinFiles() {
 	i := NewInstaller("", ConflictHandlers.Replace)
-	err := i.Run(s.fsFix.Binfiles, s.fsFix.LocalBinDir)
+	err := i.Run(pl.PosixSliceStringer(s.fsFix.Binfiles), s.fsFix.LocalBinDir.String())
 	s.NoError(err)
 
-	entries, err := pl.NewPosixPath(s.fsFix.LocalBinDir).Glob("*")
+	entries, err := s.fsFix.LocalBinDir.Glob("*")
 	s.NoError(err)
-	sort.Sort(pl.LexOrder(entries))
+	sort.Sort(pl.LexOrderPosix(entries))
 	s.Len(entries, 3)
 
 	expectNames := []string{"cat", "dog", "ls"}

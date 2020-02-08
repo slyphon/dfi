@@ -58,7 +58,7 @@ func (d LinkData) mapPaths(fn func(path string) (string, error), skipLinkData bo
 }
 
 func (d LinkData) RelTo(basepath string) (rel *LinkData, err error) {
-	fn := func (p string) (string, error) {
+	fn := func(p string) (string, error) {
 		return fp.Rel(basepath, p)
 	}
 
@@ -80,7 +80,7 @@ func LinkDataForList(vpaths []string, targetDir string, prefix string) (data []L
 }
 
 func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error) {
-	linkPath := fp.Join(targetDir, prefix + fp.Base(vpath))
+	linkPath := fp.Join(targetDir, prefix+fp.Base(vpath))
 
 	common := FindCommonRoot(vpath, linkPath)
 	// we found a common root, now relativize the link data to point at the
@@ -88,10 +88,10 @@ func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error
 	if common != "" {
 		// logging context for errors
 		ctx := log.WithFields(log.Fields{
-			"vpath": vpath,
-			"linkPath": linkPath,
+			"vpath":     vpath,
+			"linkPath":  linkPath,
 			"targetDir": targetDir,
-			"common": common,
+			"common":    common,
 		})
 
 		rel, err := fp.Rel(targetDir, common)
@@ -107,7 +107,7 @@ func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error
 		}
 
 		return LinkData{
-			Vpath: vpath,
+			Vpath:    vpath,
 			LinkPath: linkPath,
 			LinkData: fp.Join(rel, vpRel),
 		}, nil
@@ -115,7 +115,7 @@ func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error
 
 	// no common path, just use an abspath
 	return LinkData{
-		Vpath: vpath,
+		Vpath:    vpath,
 		LinkPath: linkPath,
 		LinkData: vpath,
 	}, nil
@@ -123,8 +123,40 @@ func LinkDataFor(vpath string, targetDir string, prefix string) (LinkData, error
 
 type byVpath []LinkData
 
-func (v byVpath) Len() int { return len(v) }
-func (v byVpath) Swap(i, j int) { v[i], v[j] = v[j], v[i] }
+func (v byVpath) Len() int           { return len(v) }
+func (v byVpath) Swap(i, j int)      { v[i], v[j] = v[j], v[i] }
 func (v byVpath) Less(i, j int) bool { return v[i].Vpath < v[j].Vpath }
 
 var _ sort.Interface = byVpath(nil)
+
+type (
+	LinkDataOps interface {
+		// Filter returns a copy of the slice with only those elements
+		// for which the given function returns true.
+		Filter(func(ld LinkData) bool) []LinkData
+		// Finds the first matching entry and returns a pointer to it
+		// or nil if it's not found
+		Find(func(ld LinkData) bool) *LinkData
+	}
+
+	LinkDataOpsT []LinkData
+)
+
+func (ldo LinkDataOpsT) Filter(fn func(ld LinkData) bool) []LinkData {
+	filtered := make([]LinkData, 0, len(ldo))
+	for _, ld := range ldo {
+		if fn(ld) {
+			filtered = append(filtered, ld)
+		}
+	}
+	return filtered
+}
+
+func (ldo LinkDataOpsT) Find(fn func(ld LinkData) bool) *LinkData {
+	for _, ld := range ldo {
+		if fn(ld) {
+			return &ld
+		}
+	}
+	return nil
+}
