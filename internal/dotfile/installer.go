@@ -66,7 +66,7 @@ func runApply(ld LinkData, conflict OnConflict) (err error) {
 
 			// otherwise it's bad, and we delegate to the onConflict.handler
 			// to tell us what to do
-			switch skip, err := conflict.handle(lpath.String()); {
+			switch skip, err := conflict.Handle(lpath.String()); {
 			case err != nil:
 				return err
 			case skip: 	// the handler wants us to ignore this path
@@ -75,7 +75,7 @@ func runApply(ld LinkData, conflict OnConflict) (err error) {
 				return fn()
 			}
 		} else if lpath.IsFile() || lpath.IsDir() {
-			switch skip, err := conflict.handle(lpath.String()); {
+			switch skip, err := conflict.Handle(lpath.String()); {
 			case err != nil:
 				return err
 			case skip:
@@ -93,15 +93,6 @@ func runApply(ld LinkData, conflict OnConflict) (err error) {
 	return fn()
 }
 
-func dryRunApply(ld LinkData) error {
-	return nil
-}
-
-func NewDryRunInstaller(prefix string, onConflict OnConflict) *Installer {
-	var apply = dryRunApply
-
-	return &Installer{prefix, onConflict, apply}
-}
 
 func NewInstaller(prefix string, onConflict OnConflict) *Installer {
 	var applyFn ApplyFn
@@ -111,12 +102,35 @@ func NewInstaller(prefix string, onConflict OnConflict) *Installer {
 	return &Installer{prefix, onConflict, applyFn}
 }
 
+type conflictingNamePair struct {
+	a string
+	b string
+}
+
+func areLinkNamesUnique(srcPaths []string) *conflictingNamePair {
+	seen := make(map[string]string)
+
+	for _, sp := range srcPaths {
+		pp := ppath.NewPurePath(sp)
+		if old, ok := seen[pp.Name()]; ok {
+			return &conflictingNamePair{a: old, b: sp}
+		} else {
+			seen[pp.Name()] = sp
+		}
+	}
+	return nil
+}
+
 func (n *Installer) Run(sourcePaths []string, destPath string) (err error) {
 	var src []string
 	var dst string
 
 	if src, err = mkAbs(sourcePaths); err != nil {
 		return err
+	}
+
+	if cnp := areLinkNamesUnique(src); cnp != nil {
+		return errors.Errorf("duplicate names detected in input: %+v", *cnp)
 	}
 
 	if dst, err = fp.Abs(destPath); err != nil {

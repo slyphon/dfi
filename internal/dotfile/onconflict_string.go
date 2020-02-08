@@ -18,9 +18,9 @@ const _OnConflict_name = "RenameReplaceWarnFail"
 
 var _OnConflict_index = [...]uint8{0, 6, 13, 17, 21}
 
-func (i OnConflict) String() string {
-	if i < 0 || i >= OnConflict(len(_OnConflict_index)-1) {
-		return "OnConflict(" + strconv.FormatInt(int64(i), 10) + ")"
+func (oc OnConflict) String() string {
+	if oc < 0 || oc >= OnConflict(len(_OnConflict_index)-1) {
+		return "OnConflict(" + strconv.FormatInt(int64(oc), 10) + ")"
 	}
-	return _OnConflict_name[_OnConflict_index[i]:_OnConflict_index[i+1]]
+	return _OnConflict_name[_OnConflict_index[oc]:_OnConflict_index[oc+1]]
 }

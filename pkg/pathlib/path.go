@@ -15,7 +15,7 @@ type (
 	PurePath interface {
 		Name() string
 		Parent() PurePath
-		Join(names... string) PurePath
+		Join(names ...string) PurePath
 		Clean() PurePath
 		Match(pattern string) (matched bool, err error)
 
@@ -69,6 +69,7 @@ type (
 		IsMount() bool
 		SameFile(other PosixPath) (bool, error)
 		IsDir() bool
+		Glob(pattern string) ([]PosixPath, error)
 	}
 
 	pathStr string
@@ -188,17 +189,17 @@ func (r richFileInfo) IsSymlink() bool {
 
 func (r richFileInfo) String() string {
 	return fmt.Sprintf("%#v", struct {
-		Name string
-		Mode string
-		Size int64
+		Name    string
+		Mode    string
+		Size    int64
 		ModTime time.Time
-		IsDir bool
+		IsDir   bool
 	}{
-		Name: r.Name(),
-		Mode: r.Mode().String(),
-		Size: r.Size(),
+		Name:    r.Name(),
+		Mode:    r.Mode().String(),
+		Size:    r.Size(),
 		ModTime: r.ModTime(),
-		IsDir: r.IsDir(),
+		IsDir:   r.IsDir(),
 	})
 }
 
@@ -310,6 +311,18 @@ func (p pathStr) SameFile(other PosixPath) (b bool, err error) {
 	return os.SameFile(this.getInfo(), that.getInfo()), nil
 }
 
+func (p pathStr) Glob(pattern string) ([]PosixPath, error) {
+	matches, err := fp.Glob(fp.Join(p.String(), pattern))
+	if err != nil {
+		return nil, err
+	}
+	paths := make([]PosixPath, 0, len(matches))
+	for _, m := range matches {
+		paths = append(paths, NewPosixPath(m))
+	}
+	return paths, err
+}
+
 func (p pathStr) IsBlockDevice() bool {
 	info, err := p.Lstat()
 	return err == nil && info.IsBlockDevice()
@@ -344,3 +357,8 @@ func (p pathStr) IsDir() bool {
 	info, err := p.Lstat()
 	return err == nil && info.IsDir()
 }
+
+type LexOrder []PosixPath
+func (o LexOrder) Len() int           { return len(o) }
+func (o LexOrder) Less(i, j int) bool { return o[i].String() < o[j].String() }
+func (o LexOrder) Swap(i, j int)      { o[i], o[j] = o[j], o[i] }

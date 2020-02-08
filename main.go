@@ -18,5 +18,5 @@ package main
 import "github.com/slyphon/dfi/cmd"
 
 func main() {
-  cmd.Execute()
+  cmd.Execute(cmd.NewRootCommand())
 }

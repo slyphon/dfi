@@ -13,6 +13,9 @@ import (
 
 type (
 	OnConflict int
+	ConflictHandler interface {
+		Handle(linkPath string) (skip bool, err error)
+	}
 )
 
 const (
@@ -22,9 +25,18 @@ const (
 	Fail
 )
 
+var ConflictHandlers = struct {
+	Rename OnConflict
+	Replace OnConflict
+	Warn OnConflict
+	Fail OnConflict
+} {Rename, Replace, Warn, Fail}
+
 const (
 	TimeFormat string = "20060102150405"
 )
+
+var _ ConflictHandler = OnConflict(0)
 
 func timestamp() string {
 	return time.Now().Format(TimeFormat)
@@ -102,7 +114,7 @@ func doReplace(path string) error {
 	return errors.Wrapf(os.Remove(path), "failed to remove %#v", path)
 }
 
-func (oc OnConflict) handle(linkPath string) (skip bool, err error) {
+func (oc OnConflict) Handle(linkPath string) (skip bool, err error) {
 	switch oc {
 	case Rename:
 		return false, doRename(linkPath)
