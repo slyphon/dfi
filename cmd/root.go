@@ -93,10 +93,6 @@ If a link path already exists, the following strategies are available:
 
 			settings.DestPath = args[len(args)-1]
 
-			if err = destIsDir(settings.DestPath); err != nil {
-				return err
-			}
-
 			sources := args[0 : len(args)-1]
 
 			var isStdin bool
@@ -144,17 +140,6 @@ If a link path already exists, the following strategies are available:
 	)
 
 	return rootCmd
-}
-
-func destIsDir(dest string) error {
-	info, err := os.Stat(dest)
-	if err != nil {
-		return errors.Wrapf(err, "failed to stat dest: %v", dest)
-	}
-	if !info.Mode().IsDir() {
-		return errors.Errorf("dest was not a directory: %v", dest)
-	}
-	return nil
 }
 
 // Execute adds all child commands to the root command and sets flags appropriately.

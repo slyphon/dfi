@@ -121,9 +121,27 @@ func areLinkNamesUnique(srcPaths []string) *conflictingNamePair {
 	return nil
 }
 
+func destIsDir(dest string) error {
+	pp := ppath.NewPosixPath(dest)
+
+	if !pp.Exists() {
+		return errors.Errorf("dest did not exist: %v", dest)
+	}
+
+	if !pp.IsDir() {
+		return errors.Errorf("dest is not a directory: %v", dest)
+	}
+
+	return nil
+}
+
 func (n *Installer) Run(sourcePaths []string, destPath string) (err error) {
 	var src []string
 	var dst string
+
+	if err = destIsDir(destPath); err != nil {
+		return err
+	}
 
 	if src, err = mkAbs(sourcePaths); err != nil {
 		return err

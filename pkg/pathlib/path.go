@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/gobwas/glob"
+	log "github.com/sirupsen/logrus"
 )
 
 type (
@@ -61,7 +62,9 @@ type (
 		Rel(other string) (PosixPath, error)
 		Resolve() (PosixPath, error)
 		Mkdir(perm os.FileMode) error
+		MustMkdir(perm os.FileMode)
 		MkdirAll(perm os.FileMode) error
+		MustMkdirAll(perm os.FileMode)
 		Remove() error
 		RemoveAll() error
 		Lexists() bool
@@ -237,8 +240,22 @@ func (p pathStr) Mkdir(perm os.FileMode) error {
 	return os.Mkdir(string(p), perm)
 }
 
+func (p pathStr) MustMkdir(perm os.FileMode) {
+	err := p.Mkdir(perm)
+	if err != nil {
+		log.Panicf("error in Mkdir for %v, perms: %v, err: %+v", p.String(), perm.String(), err.Error())
+	}
+}
+
 func (p pathStr) MkdirAll(perm os.FileMode) error {
 	return os.MkdirAll(string(p), perm)
+}
+
+func (p pathStr) MustMkdirAll(perm os.FileMode) {
+	err := p.MkdirAll(perm)
+	if err != nil {
+		log.Panicf("error in MkdirAll for %v, perms: %v, err: %+v", p.String(), perm.String(), err.Error())
+	}
 }
 
 func (p pathStr) Remove() error {
